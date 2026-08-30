@@ -8,6 +8,10 @@ services:
     network_mode: host
     volumes:
       - ./config:/etc/dns
+      - ./certs/root_ca.crt:/usr/local/share/ca-certificates/homelab-root-ca.crt:ro
+    # update-ca-certificates first: .NET must trust the step-ca leaf on
+    # https://auth.lab.gn.al for server-side OIDC (SSO) token calls.
+    entrypoint: ["/bin/sh", "-c", "update-ca-certificates >/dev/null 2>&1 || true; exec dotnet /opt/technitium/dns/DnsServerApp.dll /etc/dns"]
     environment:
       # First-boot seeds ONLY — Technitium ignores env once ./config exists.
       # Steady-state config is applied by seed-dns.sh through the HTTP API.

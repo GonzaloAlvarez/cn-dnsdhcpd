@@ -2,5 +2,6 @@
 config/
 backups/
 secrets/
+certs/
 *.bak
 .DS_Store

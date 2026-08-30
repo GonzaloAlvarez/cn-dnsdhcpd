@@ -93,6 +93,26 @@ fi
 log "applying settings (mode=${MODE} dnssec=${DNSSEC} blocking=${BLOCKING} tsig=${TSIG_NAME:-none})"
 api settings/set "${args[@]}" >/dev/null
 
+# ── 1b. Authentik SSO (OIDC) for the web console ─────────────────────────────
+
+SSO_ID="$(env_get SSO_CLIENT_ID)"
+SSO_SECRET="$(env_get SSO_CLIENT_SECRET)"
+if [[ -n "$SSO_ID" && -n "$SSO_SECRET" ]]; then
+  SSO_AUTH="$(env_get SSO_AUTHORITY)"
+  api admin/sso/set \
+    --data-urlencode "ssoEnabled=true" \
+    --data-urlencode "ssoAuthority=${SSO_AUTH}" \
+    --data-urlencode "ssoClientId=${SSO_ID}" \
+    --data-urlencode "ssoClientSecret=${SSO_SECRET}" \
+    --data-urlencode "ssoScopes=openid,profile,email,groups" \
+    --data-urlencode "ssoAllowSignup=true" \
+    --data-urlencode "ssoAllowSignupOnlyForMappedUsers=true" \
+    --data-urlencode "ssoGroupMap=$(env_get SSO_GROUP_MAP)" >/dev/null
+  log "SSO enabled (authority=${SSO_AUTH})"
+else
+  log "SSO_CLIENT_ID/SECRET not set — SSO left untouched"
+fi
+
 # ── 2. Query Logs (Sqlite) app ───────────────────────────────────────────────
 
 APP_NAME="Query Logs (Sqlite)"

@@ -47,9 +47,18 @@ BASE="http://127.0.0.1:5380"
 
 # ── dirs + admin password secret file ───────────────────────────────────────
 
-mkdir -p config backups secrets
+mkdir -p config backups secrets certs
 # placeholder so the metrics-exporter bind mount never materializes as a dir
 [[ -f secrets/api_token.txt ]] || ( umask 077; printf '' > secrets/api_token.txt )
+
+# step-ca root — mounted into the technitium container so server-side OIDC
+# (SSO via https://auth.lab.gn.al, step-ca leaf) verifies. Served by the
+# co-tenant cn-pki traefik on this very host.
+if [[ ! -f certs/root_ca.crt ]]; then
+  curl -sSf "http://pki.lan/cert/ca.crt" -o certs/root_ca.crt \
+    || die "could not fetch step-ca root from http://pki.lan/cert/ca.crt"
+  log "fetched step-ca root CA"
+fi
 
 ADMIN_PW="$(env_get DNS_ADMIN_PASSWORD)"
 [[ -n "$ADMIN_PW" ]] || die "DNS_ADMIN_PASSWORD is empty in the Kauket-managed .env"
