@@ -34,12 +34,29 @@ known cosmetic wart).
 
 ## Bring-up
 
+**UFW prerequisite** (one-time, done 2026-08-30): pki runs ufw default-deny.
+Docker-proxied ports (cn-pki 80/443/9000) bypass it via the DOCKER iptables
+chain, but host-networked services do NOT — Technitium needs:
+
+```sh
+sudo ufw allow proto udp from any to any port 53 comment 'cn-dnsdhcpd Technitium DNS'
+sudo ufw allow proto tcp from any to any port 53 comment 'cn-dnsdhcpd Technitium DNS'
+sudo ufw allow proto tcp from 10.0.0.0/8 to any port 5380 comment 'cn-dnsdhcpd console break-glass (LAN)'
+sudo ufw allow proto tcp from 172.18.0.0/16 to any port 5380 comment 'cn-dnsdhcpd console via cn-pki traefik'
+```
+
+(Phase 2 DHCP needs 67/udp opened too — see runbook b.)
+
 ```sh
 git clone git@github.com:GonzaloAlvarez/cn-dnsdhcpd.git ~/cn-dnsdhcpd
 cd ~/cn-dnsdhcpd
 kauket get pki.cn_dnsdhcpd_env   # installs .env (0600)
 ./setup.sh
 ```
+
+The clone authenticates with pki's `~/.ssh/id_ed25519`, registered as a
+read-only GitHub deploy key on this repo (pki has no account-level GitHub
+credentials).
 
 `setup.sh` renders the admin-password secret file, brings the stack up, mints
 the non-expiring API token on first run, and applies `seed-dns.sh`.
