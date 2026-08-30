@@ -1,0 +1,16 @@
+# cn-dnsdhcpd zone inventory — TAB-separated: zone	type	forwarder	comment
+# type Forwarder = Technitium "Conditional Forwarder" (local records answer
+# first; anything else follows the FWD record). forwarder "this-server"
+# loops back into this server's own resolution path (split-horizon).
+lan	Forwarder	10.0.0.1	phase-1 hidden registry: pfSense Unbound answers dynamic+static DHCP names (regdhcp)
+kaiser.lan	Forwarder	10.1.1.140	cn-home CoreDNS wildcard zone (was pfSense Domain Override)
+k8s.lan	Forwarder	10.0.0.200	k8s_gateway MetalLB VIP (seed-dns.sh live-checks .200 vs .210)
+10.in-addr.arpa	Forwarder	10.0.0.1	reverse lookups via pfSense (phase 1)
+home.lan	Primary	-	wildcard redirect -> 10.120.10.55 (was Unbound local-zone redirect)
+hefner.lan	Primary	-	wildcard redirect -> 10.1.1.140 (was Unbound local-zone redirect)
+lab.gn.al	Forwarder	this-server	split-horizon: local records answer first, rest -> recursion (public NXDOMAIN)
+acmdm.apple.com	Primary	-	Apple DEP/MDM sinkhole (was pfSense host override 0.0.0.0)
+albert.apple.com	Primary	-	Apple DEP/MDM sinkhole
+deviceenrollment.apple.com	Primary	-	Apple DEP/MDM sinkhole
+iprofiles.apple.com	Primary	-	Apple DEP/MDM sinkhole
+mdmenrollment.apple.com	Primary	-	Apple DEP/MDM sinkhole

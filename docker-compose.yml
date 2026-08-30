@@ -1,0 +1,106 @@
+services:
+  # Technitium DNS Server — the LAN resolver (phase 1: DNS only; DHCP scopes
+  # come later, see README runbook b). Host networking is required: per-client
+  # stats/ACLs need real source IPs, and the future DHCP role needs broadcast
+  # + giaddr visibility. Deliberately NO ports:/sysctls: blocks (host mode).
+  technitium:
+    image: technitium/dns-server:15.4.0
+    network_mode: host
+    volumes:
+      - ./config:/etc/dns
+    environment:
+      # First-boot seeds ONLY — Technitium ignores env once ./config exists.
+      # Steady-state config is applied by seed-dns.sh through the HTTP API.
+      - DNS_SERVER_DOMAIN=pki.lan
+      - DNS_SERVER_ADMIN_PASSWORD_FILE=/run/secrets/admin_password
+      - DNS_SERVER_WEB_SERVICE_LOCAL_ADDRESSES=10.0.0.192,127.0.0.1
+      - DNS_SERVER_LOG_USING_LOCAL_TIME=true
+      - TZ=${TIMEZONE}
+    secrets:
+      - admin_password
+    mem_limit: 1536m
+    healthcheck:
+      # TCP connect to the web service — deliberately NOT a recursive DNS
+      # query, so an upstream outage can't mark the container unhealthy
+      # (amun-docker reconcile force-recreates stuck-unhealthy containers).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5380"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    labels:
+      # cn-pki's HOST-WIDE watchtower must not float the pinned resolver
+      # image — updates are deliberate (see README "Upgrading").
+      com.centurylinklabs.watchtower.enable: "false"
+    restart: unless-stopped
+
+  # Daily API-consistent backup: fetches Technitium's settings/backup zip
+  # (settings, zones, apps, auth config, DHCP scopes) into ./backups for
+  # offen to tar. Long-running loop ON PURPOSE — a one-shot service here
+  # would not match amun-docker reconcile-stack.sh SKIP_RE and would get
+  # restart-looped every 5 minutes.
+  backup-dump:
+    image: curlimages/curl:8.8.0
+    network_mode: host
+    # uid of gonzalo on pki so it can write the ./backups bind mount
+    user: "1000:1000"
+    environment:
+      - TECHNITIUM_API_TOKEN=${TECHNITIUM_API_TOKEN}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          newest=$$(ls -1t /backups/technitium-*.zip 2>/dev/null | head -1)
+          need=1
+          if [ -n "$$newest" ]; then
+            age=$$(( $$(date +%s) - $$(stat -c %Y "$$newest") ))
+            [ "$$age" -lt 72000 ] && need=0
+          fi
+          if [ "$$need" = 1 ] && [ -n "$$TECHNITIUM_API_TOKEN" ]; then
+            out="/backups/technitium-$$(date +%F).zip"
+            if curl -sf "http://127.0.0.1:5380/api/settings/backup?token=$$TECHNITIUM_API_TOKEN&dnsSettings=true&logSettings=true&webServiceSettings=true&authConfig=true&zones=true&allowedZones=true&blockedZones=true&apps=true&scopes=true&stats=true&blockLists=false&logs=false" -o "$$out.tmp"; then
+              mv "$$out.tmp" "$$out"
+              echo "backup written: $$out"
+            else
+              rm -f "$$out.tmp"
+              echo "backup FAILED (token empty/invalid or API down)" >&2
+            fi
+          fi
+          find /backups -name 'technitium-*.zip' -mtime +14 -delete 2>/dev/null
+          sleep 900
+        done
+    restart: unless-stopped
+
+  # offen — weekly tar of ./config (live state, best-effort) + ./backups
+  # (the authoritative settings/backup zips) to shared S3 + raidnas WebDAV.
+  # Backup window: Sun 02:00 (vaultwarden/fitness 03:00, authentik 03:30,
+  # mzfxa 04:30, librechat 05:00). No stop-during-backup label: the API zip
+  # is the consistent artifact — never take the LAN resolver down weekly.
+  backup:
+    image: offen/docker-volume-backup:v2.43.4
+    environment:
+      - BACKUP_CRON_EXPRESSION=0 2 * * 0
+      - BACKUP_FILENAME=dnsdhcpd-%Y-%m-%dT%H-%M-%S.tar.gz
+      - BACKUP_RETENTION_DAYS=56
+      - AWS_S3_BUCKET_NAME=${BACKUP_S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${BACKUP_AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${BACKUP_AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_REGION=${BACKUP_AWS_REGION}
+      - AWS_S3_PATH=dnsdhcpd/
+      - WEBDAV_URL=${BACKUP_WEBDAV_URL}
+      - WEBDAV_PATH=/dnsdhcpd/
+      - WEBDAV_USERNAME=${BACKUP_WEBDAV_USER}
+      - WEBDAV_PASSWORD=${BACKUP_WEBDAV_PASSWORD}
+      - NOTIFICATION_URLS=smtp://${SMTP_USERNAME}:${SMTP_PASSWORD}@${SMTP_HOST}:${SMTP_PORT}/?from=${SMTP_FROM}&to=${ALERT_EMAIL}&starttls=yes
+      - NOTIFICATION_LEVEL=info
+      - TZ=${TIMEZONE}
+    volumes:
+      - ./config:/backup/config:ro
+      - ./backups:/backup/api-backups:ro
+    restart: unless-stopped
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password.txt

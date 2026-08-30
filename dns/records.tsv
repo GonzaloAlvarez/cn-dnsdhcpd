@@ -1,0 +1,33 @@
+# cn-dnsdhcpd record inventory — TAB-separated: zone	domain	type	value	ttl
+# Applied with overwrite=true: each run REPLACES the whole RRset, so this
+# file is authoritative. Migrated 1:1 from pfSense Unbound host overrides +
+# custom options (exported 2026-08-29).
+lan	auth.neptune.lan	A	10.1.1.92	300
+lan	outline.neptune.lan	A	10.1.1.92	300
+lan	photos.neptune.lan	A	10.1.1.92	300
+lan	sync.neptune.lan	A	10.1.1.92	300
+lan	accounts.fxa.neptune.lan	A	10.1.1.92	300
+lan	api.fxa.neptune.lan	A	10.1.1.92	300
+lan	oauth.fxa.neptune.lan	A	10.1.1.92	300
+lan	profile.fxa.neptune.lan	A	10.1.1.92	300
+lan	auth.infra.lan	A	10.1.1.158	300
+lan	dns.pki.lan	A	10.0.0.192	300
+lab.gn.al	auth.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	outline.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	photos.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	sync.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	accounts.fxa.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	api.fxa.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	oauth.fxa.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	profile.fxa.lab.gn.al	A	10.1.1.92	300
+lab.gn.al	chat.lab.gn.al	A	10.1.1.140	300
+lab.gn.al	exercises.lab.gn.al	A	10.1.1.140	300
+home.lan	home.lan	A	10.120.10.55	300
+home.lan	*.home.lan	A	10.120.10.55	300
+hefner.lan	hefner.lan	A	10.1.1.140	300
+hefner.lan	*.hefner.lan	A	10.1.1.140	300
+acmdm.apple.com	acmdm.apple.com	A	0.0.0.0	300
+albert.apple.com	albert.apple.com	A	0.0.0.0	300
+deviceenrollment.apple.com	deviceenrollment.apple.com	A	0.0.0.0	300
+iprofiles.apple.com	iprofiles.apple.com	A	0.0.0.0	300
+mdmenrollment.apple.com	mdmenrollment.apple.com	A	0.0.0.0	300
