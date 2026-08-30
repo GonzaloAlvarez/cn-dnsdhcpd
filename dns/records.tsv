@@ -1,33 +1,106 @@
-# cn-dnsdhcpd record inventory — TAB-separated: zone	domain	type	value	ttl
+# cn-dnsdhcpd record inventory — TAB-separated: zone	domain	type	value	ttl	ptr
 # Applied with overwrite=true: each run REPLACES the whole RRset, so this
-# file is authoritative. Migrated 1:1 from pfSense Unbound host overrides +
-# custom options (exported 2026-08-29).
-lan	auth.neptune.lan	A	10.1.1.92	300
-lan	outline.neptune.lan	A	10.1.1.92	300
-lan	photos.neptune.lan	A	10.1.1.92	300
-lan	sync.neptune.lan	A	10.1.1.92	300
-lan	accounts.fxa.neptune.lan	A	10.1.1.92	300
-lan	api.fxa.neptune.lan	A	10.1.1.92	300
-lan	oauth.fxa.neptune.lan	A	10.1.1.92	300
-lan	profile.fxa.neptune.lan	A	10.1.1.92	300
-lan	auth.infra.lan	A	10.1.1.158	300
-lan	dns.pki.lan	A	10.0.0.192	300
-lab.gn.al	auth.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	outline.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	photos.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	sync.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	accounts.fxa.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	api.fxa.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	oauth.fxa.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	profile.fxa.lab.gn.al	A	10.1.1.92	300
-lab.gn.al	chat.lab.gn.al	A	10.1.1.140	300
-lab.gn.al	exercises.lab.gn.al	A	10.1.1.140	300
-home.lan	home.lan	A	10.120.10.55	300
-home.lan	*.home.lan	A	10.120.10.55	300
-hefner.lan	hefner.lan	A	10.1.1.140	300
-hefner.lan	*.hefner.lan	A	10.1.1.140	300
-acmdm.apple.com	acmdm.apple.com	A	0.0.0.0	300
-albert.apple.com	albert.apple.com	A	0.0.0.0	300
-deviceenrollment.apple.com	deviceenrollment.apple.com	A	0.0.0.0	300
-iprofiles.apple.com	iprofiles.apple.com	A	0.0.0.0	300
-mdmenrollment.apple.com	mdmenrollment.apple.com	A	0.0.0.0	300
+# file is authoritative for these names (manual UI edits revert on re-seed).
+# ptr=true also writes the matching PTR into the reverse zones (one PTR per
+# IP — only the host's canonical name sets ptr=true; aliases set false).
+#
+# Sections:
+#  1. Split-horizon / alias overrides (ex-pfSense host overrides)
+#  2. Wildcard-redirect zones (ex-Unbound local-zone redirect custom options)
+#  3. Apple DEP/MDM sinkholes
+#  4. pfSense static DHCP mappings, mirrored 1:1 (exported 2026-08-29)
+#  5. Load-bearing dynamic-lease pins (router/pki/kaiser/infra/homeiot/rpid*).
+#     These SHOULD become pfSense reservations; dhcpd DDNS won't overwrite
+#     them (no DHCID prerequisite match) — that's intended. kaiser.lan's A is
+#     occluded by the kaiser.lan Forwarder zone (CoreDNS answers) — the row
+#     exists for its PTR.
+lan	auth.neptune.lan	A	10.1.1.92	300	false
+lan	outline.neptune.lan	A	10.1.1.92	300	false
+lan	photos.neptune.lan	A	10.1.1.92	300	false
+lan	sync.neptune.lan	A	10.1.1.92	300	false
+lan	accounts.fxa.neptune.lan	A	10.1.1.92	300	false
+lan	api.fxa.neptune.lan	A	10.1.1.92	300	false
+lan	oauth.fxa.neptune.lan	A	10.1.1.92	300	false
+lan	profile.fxa.neptune.lan	A	10.1.1.92	300	false
+lan	auth.infra.lan	A	10.1.1.158	300	false
+lan	dns.pki.lan	A	10.0.0.192	300	false
+lab.gn.al	auth.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	outline.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	photos.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	sync.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	accounts.fxa.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	api.fxa.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	oauth.fxa.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	profile.fxa.lab.gn.al	A	10.1.1.92	300	false
+lab.gn.al	chat.lab.gn.al	A	10.1.1.140	300	false
+lab.gn.al	exercises.lab.gn.al	A	10.1.1.140	300	false
+home.lan	home.lan	A	10.120.10.55	300	false
+home.lan	*.home.lan	A	10.120.10.55	300	false
+hefner.lan	hefner.lan	A	10.1.1.140	300	false
+hefner.lan	*.hefner.lan	A	10.1.1.140	300	false
+acmdm.apple.com	acmdm.apple.com	A	0.0.0.0	300	false
+albert.apple.com	albert.apple.com	A	0.0.0.0	300	false
+deviceenrollment.apple.com	deviceenrollment.apple.com	A	0.0.0.0	300	false
+iprofiles.apple.com	iprofiles.apple.com	A	0.0.0.0	300	false
+mdmenrollment.apple.com	mdmenrollment.apple.com	A	0.0.0.0	300	false
+lan	sg300.lan	A	10.0.0.40	300	true
+lan	usg24.lan	A	10.0.0.106	300	true
+lan	DESKTOP-B084HF4.lan	A	10.0.0.245	300	true
+lan	fermat.lan	A	10.1.1.11	300	true
+lan	calendula.lan	A	10.1.1.50	300	true
+lan	unifi.lan	A	10.1.1.90	300	true
+lan	neptune.lan	A	10.1.1.92	300	true
+lan	elitedesk.lan	A	10.1.1.98	300	true
+lan	brotherprinter.lan	A	10.2.0.19	300	true
+lan	cam-victor.lan	A	10.2.0.22	300	true
+lan	cam-back.lan	A	10.2.0.24	300	true
+lan	omega.lan	A	10.2.0.28	300	true
+lan	omegados.lan	A	10.2.0.29	300	true
+lan	cam-silvia.lan	A	10.2.0.35	300	true
+lan	cam-front.lan	A	10.2.0.37	300	true
+lan	c4b301d43661.lan	A	10.2.0.120	300	true
+lan	hp2910.lan	A	10.111.20.10	300	true
+lan	tplink-closet.lan	A	10.166.0.100	300	true
+lan	echoshowhomeoffice.lan	A	10.166.2.61	300	true
+lan	ecobeethermostat.lan	A	10.166.3.11	300	true
+lan	wyzecam.lan	A	10.166.4.111	300	true
+lan	hass.lan	A	10.120.12.100	300	true
+lan	pxe-shuttle.lan	A	10.120.20.21	300	true
+lan	mendel.lan	A	10.120.20.25	300	true
+lan	pxe-r710.lan	A	10.120.20.31	300	true
+lan	germanic.lan	A	10.120.20.35	300	true
+lan	pxe-dl360.lan	A	10.120.20.41	300	true
+lan	sam.lan	A	10.120.20.45	300	true
+lan	verdi.lan	A	10.120.20.51	300	true
+lan	bella.lan	A	10.120.20.55	300	true
+lan	balkan.lan	A	10.120.20.61	300	true
+lan	slavic.lan	A	10.120.20.71	300	true
+lan	debussy.lan	A	10.120.20.81	300	true
+lan	chopin.lan	A	10.120.20.91	300	true
+lan	passwords.lan	A	10.120.22.10	300	true
+lan	mnas.lan	A	10.120.22.20	300	true
+lan	cron.lan	A	10.120.22.30	300	true
+lan	vpn.lan	A	10.120.22.40	300	true
+lan	labnas.lan	A	10.120.26.10	300	true
+lan	raidnas.lan	A	10.120.26.20	300	true
+lan	snas.lan	A	10.120.26.30	300	true
+lan	nas.lan	A	10.120.26.40	300	true
+lan	macminione.lan	A	10.120.33.21	300	true
+lan	baltic.lan	A	10.120.33.111	300	true
+lan	router.lan	A	10.0.0.1	300	true
+lan	pki.lan	A	10.0.0.192	300	true
+lan	kaiser.lan	A	10.1.1.140	300	true
+lan	infra.lan	A	10.1.1.158	300	true
+lan	homeiot.lan	A	10.1.1.134	300	true
+lan	rpid0.lan	A	10.1.1.156	300	true
+lan	rpid1.lan	A	10.1.1.154	300	true
+lan	rpid2.lan	A	10.1.1.155	300	true
+lan	rpid3.lan	A	10.0.0.184	300	true
+lan	rpid4.lan	A	10.0.0.185	300	true
+lan	rpid5.lan	A	10.0.0.187	300	true
+lan	rpid6.lan	A	10.0.0.189	300	true
+lan	rpid7.lan	A	10.1.1.131	300	true
+lan	rpid8.lan	A	10.1.1.133	300	true
+lan	rpid9.lan	A	10.0.0.191	300	true
+lan	rpid10.lan	A	10.0.0.193	300	true
+lan	rpid11.lan	A	10.0.0.188	300	true

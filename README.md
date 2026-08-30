@@ -2,10 +2,17 @@
 
 [Technitium DNS Server](https://technitium.com/dns/) 15.4 on **pki.lan**
 (10.0.0.192) — the client-facing LAN resolver, replacing pfSense Unbound.
-Phase 1 is **DNS only**: pfSense keeps DHCP, and its Unbound stays alive as a
-*hidden lease-name registry* (this stack forwards the `lan` zone and
-`10.in-addr.arpa` to it, so dynamic/static DHCP hostnames keep resolving).
-Phase 2 (optional, runbook below) delegates DHCP here via pfSense DHCP Relay.
+
+**Division of labor**: pfSense keeps DHCP; every lease event pushes the
+hostname's A + PTR records straight into Technitium via **RFC 2136 dynamic
+updates (TSIG-signed)**, and DHCP hands clients `10.0.0.192` as their DNS
+server. The `lan` zone and six per-VLAN reverse zones are Primary zones here;
+all pfSense static mappings and the load-bearing infrastructure hosts are
+additionally pinned as static records (`dns/records.tsv`), so nothing depends
+on a lease renewal to resolve. pfSense Unbound stays enabled only for the
+router's own resolution — it is out of the client path entirely.
+Phase 2 (optional, runbook b) would move DHCP itself here via pfSense DHCP
+Relay.
 
 Tailnet DNS (VPS CoreDNS for `*.lab.gn.al`, MagicDNS for `*.ts.gn.al`) is
 **not** touched by this stack. pki is unreachable from pure-tailnet clients
@@ -80,15 +87,23 @@ time) from:
   `DNS_FORWARDERS`, `DNS_DNSSEC`, `DNS_BLOCKING`, `BLOCKLIST_URLS`.
   Launch values mirror pfSense Unbound exactly: full recursion, DNSSEC off,
   blocking off.
-- **`dns/zones.tsv`** — the zone inventory (12 zones):
-  `lan` + `10.in-addr.arpa` → forward to pfSense (hidden registry);
-  `kaiser.lan` → 10.1.1.140 (cn-home CoreDNS); `k8s.lan` → k8s_gateway
-  (live-checked .200/.210 at seed time); `home.lan`/`hefner.lan` Primary
-  wildcard-redirect zones; `lab.gn.al` → `this-server` split-horizon; 5×
-  Apple DEP/MDM sinkhole Primary zones.
-- **`dns/records.tsv`** — 29 records migrated 1:1 from the pfSense host
-  overrides + custom options (exported 2026-08-29). Applied with
-  `overwrite=true`, so the TSV replaces the live RRset on every run.
+- **`dns/zones.tsv`** — the zone inventory (18 zones):
+  `lan` **Primary** (pfSense DDNS target + pinned statics); six per-VLAN
+  Primary reverse zones (DDNS PTR targets); `10.in-addr.arpa` → pfSense
+  (transitional fallback, delete after cutover); `kaiser.lan` → 10.1.1.140
+  (cn-home CoreDNS); `k8s.lan` → k8s_gateway (live-checked .200/.210 at seed
+  time); `home.lan`/`hefner.lan` Primary wildcard-redirect zones;
+  `lab.gn.al` → `this-server` split-horizon; 5× Apple DEP/MDM sinkhole
+  Primary zones.
+- **`dns/records.tsv`** — ~90 records: the pfSense host overrides + custom
+  options migrated 1:1, all 44 static DHCP mappings (with PTRs), and pins for
+  the load-bearing dynamic hosts (router/pki/kaiser/infra/homeiot/rpid0–11).
+  Applied with `overwrite=true`, so the TSV replaces the live RRset on every
+  run. Zone TYPE changes need `DNS_ALLOW_ZONE_CONVERT=true ./seed-dns.sh`.
+- **RFC 2136**: seed-dns.sh installs the `pfsense-ddns` TSIG key
+  (`DDNS_TSIG_KEY_*` in .env) and applies update policies (source ACL =
+  the six pfSense interface IPs; TSIG-scoped to A/AAAA/PTR/TXT/DHCID) on the
+  `lan` + reverse zones.
 
 Changing a **forwarder target** of an existing zone is not automated: delete
 the zone in the UI (Zones → zone → Delete), fix `zones.tsv`, re-run
@@ -124,7 +139,7 @@ Explicit expectations:
 
 | Probe | Expect |
 |---|---|
-| `dig @10.0.0.192 rpid11.lan` | same as pfSense (dynamic lease via `lan` forward) |
+| `dig @10.0.0.192 rpid11.lan` | 10.0.0.188 (pinned; dynamic clients appear via DDNS after a renewal) |
 | `dig @10.0.0.192 -x 10.0.0.1` | `router.lan.` (PTR via `10.in-addr.arpa` forward) |
 | `anything.kaiser.lan` | `10.1.1.140` (CoreDNS wildcard) |
 | `hello.k8s.lan` | matches pfSense (k8s_gateway) |
@@ -133,7 +148,7 @@ Explicit expectations:
 | `home.lan` / `x.home.lan` | `10.120.10.55` (apex + wildcard) |
 | `hefner.lan` / `y.hefner.lan` | `10.1.1.140` |
 | 5× `*.apple.com` sinkholes | `0.0.0.0` |
-| `neptune.lan` | matches pfSense — proves local records inside the `lan` forwarder don't shadow siblings |
+| `neptune.lan` | 10.1.1.92 (static-mapping pin in the Primary `lan` zone) |
 | `google.com` (`+tcp` too) | public answer (recursion, UDP + TCP) |
 | `www.dnssec-failed.org` | resolves while `DNS_DNSSEC=false`; SERVFAIL once flipped to true |
 
@@ -142,16 +157,18 @@ shows entries; kaiser Loki `{project="cn-dnsdhcpd"}` has lines.
 
 ---
 
-## Runbook a — DNS cutover (per-VLAN, incremental)
+## Runbook a — pfSense cutover (one session per scope, all in the GUI)
 
-pfSense 2.8.1, ISC DHCP backend. Today **option 6 is implicit** on every
-scope (clients get the pfSense interface IP as DNS). The cutover makes it
-explicit, one VLAN at a time.
+pfSense 2.8.1, ISC DHCP backend. Two changes per DHCP scope: hand clients
+Technitium as their DNS server, and send lease registrations to Technitium
+via RFC 2136. The Technitium side (TSIG key, Primary zones, update policies)
+is already configured by `seed-dns.sh` — nothing to do there.
 
-**Step 0 — static reservations (hard gate, do this FIRST).** Three
-load-bearing IPs are dynamic in-pool leases with no reservation. In pfSense
-→ Services → DHCP Server → *(interface)* → DHCP Static Mappings, add (MAC of
-each box; pki's is `2c:cf:67:1c:8d:7f`):
+**Step 0 — static reservations (do this FIRST).** Three load-bearing IPs are
+dynamic in-pool leases with no reservation — and one of them is the DNS
+server itself. Services → DHCP Server → *(interface)* → DHCP Static
+Mappings → Add (grab MACs from Status → DHCP Leases; pki's is
+`2c:cf:67:1c:8d:7f`):
 
 | Host | Interface | IP |
 |---|---|---|
@@ -162,25 +179,59 @@ each box; pki's is `2c:cf:67:1c:8d:7f`):
 Also note: the MetalLB VIP 10.0.0.200 (k8s_gateway) sits inside the LAN pool
 10.0.0.110–220 — consider shrinking the pool to .110–.190 while you're there.
 
-**Step 1 — flip option 6, one VLAN per day, blast-radius ascending:**
-LAB → IOT → MGMT → WIFI → WIRED → LAN (LAN last: it carries pki itself,
-rpid0–10 and the network gear). For each scope: Services → DHCP Server →
-*(interface)* → Servers → DNS Servers = `10.0.0.192` → Save.
-Clients pick it up on lease renew; force one client
-(`dhclient -r && dhclient`, or toggle Wi-Fi) and verify
-`resolvectl status` / `scutil --dns` shows 10.0.0.192, then browse LAN
-services.
+**Step 1 — per scope (×6: LAN, WIRED, WIFI, MGMT, IOT, LAB).**
+Services → DHCP Server → *(interface)*:
 
-**Step 2 — rollback (per VLAN):** blank the DNS Servers field → Save →
-clients revert to the pfSense interface IP on renew. Unbound stays running
-throughout phase 1, so rollback is instant and total.
+- **Servers → DNS Servers**: `10.0.0.192`
+  (this is what points clients at Technitium — they pick it up on lease
+  renewal, ≤1 h with the default 2 h lease; force one with
+  `dhclient -r && dhclient` or a Wi-Fi toggle to verify)
+- **Dynamic DNS** (click *Display Advanced*):
+  - ☑ Enable registration of DHCP client names in DNS
+  - DDNS Domain: `lan`
+  - Primary DDNS address: `10.0.0.192`
+  - DNS Domain key: `pfsense-ddns`
+  - Key algorithm: `hmac-sha256`
+  - DNS Domain key secret: from kauket —
+    `kauket get pki.cn_dnsdhcpd_env --stdout | grep DDNS_TSIG_KEY_SECRET`
+  - DDNS Client Updates: `Deny` (the server, not clients, owns the records)
+- Save (applies immediately; dhcpd restarts).
 
-**Never** advertise both resolvers at once (option 6 with two entries) —
-clients round-robin and behavior becomes inconsistent.
+Suggested order if you want to be careful: LAB → IOT → MGMT → WIFI → WIRED →
+LAN. Doing all six in one sitting is also fine — rollback is trivial.
 
-**Do not decommission Unbound** in phase 1. It remains: the `lan`-zone
-backend (regdhcp lease registry), pfSense's own resolver, and step-ca's
-resolver (pki's `/etc/resolv.conf` deliberately stays `10.0.0.1`).
+**Step 2 — verify.** Renew a client on the flipped scope, then:
+
+```sh
+dig @10.0.0.192 <that-client-hostname>.lan +short     # DDNS-registered A
+dig @10.0.0.192 -x <that-client-ip> +short            # DDNS-registered PTR
+```
+
+Also check pfSense's DHCP log (Status → System Logs → DHCP) for
+`Unable to add forward map` errors — those indicate a TSIG/zone mismatch.
+(One expected class of log noise: hosts pinned in `dns/records.tsv` produce
+"Has an A record but no DHCID" — deliberate; the pin wins.)
+
+**Step 3 — rollback (per scope):** blank the DNS Servers field and untick
+the Dynamic DNS checkbox → Save. Clients revert to the pfSense interface IP
+on renewal. Unbound keeps running regardless, so rollback is instant.
+
+**Step 4 — cleanup, once everything is cut over:**
+- Services → DNS Resolver: untick *DHCP Registration* and *Static DHCP*
+  (Unbound's registry is now dead weight).
+- Delete the transitional `10.in-addr.arpa` Forwarder zone from
+  `dns/zones.tsv` and in the Technitium UI (its pfSense fallback stops being
+  useful once regdhcp is off).
+- Unbound itself stays enabled for pfSense's own lookups (localhost
+  resolver) — leave it; it's no longer client-facing so its instability
+  can't hurt the LAN.
+
+**Never** list both resolvers in DNS Servers — clients round-robin between
+them and behavior becomes inconsistent.
+
+pki's own `/etc/resolv.conf` keeps pointing at `10.0.0.1` (NetworkManager,
+untouched): the DNS host must never depend on its own container for image
+pulls or step-ca ACME lookups.
 
 ## Runbook b — DHCP delegation to Technitium (phase 2, big-bang)
 

@@ -2,10 +2,19 @@
 # type Forwarder = Technitium "Conditional Forwarder" (local records answer
 # first; anything else follows the FWD record). forwarder "this-server"
 # loops back into this server's own resolution path (split-horizon).
-lan	Forwarder	10.0.0.1	phase-1 hidden registry: pfSense Unbound answers dynamic+static DHCP names (regdhcp)
+# `lan` + the six reverse zones are Primary DDNS targets: pfSense DHCP pushes
+# lease A/PTR/DHCID records into them via RFC 2136 + TSIG (seed-dns.sh
+# configures the update policy). Static hosts are pinned in records.tsv.
+lan	Primary	-	LAN forward zone: pfSense DHCP DDNS target + pinned statics
 kaiser.lan	Forwarder	10.1.1.140	cn-home CoreDNS wildcard zone (was pfSense Domain Override)
 k8s.lan	Forwarder	10.0.0.200	k8s_gateway MetalLB VIP (seed-dns.sh live-checks .200 vs .210)
-10.in-addr.arpa	Forwarder	10.0.0.1	reverse lookups via pfSense (phase 1)
+10.in-addr.arpa	Forwarder	10.0.0.1	transitional: PTR fallback for IPs outside the six DDNS reverse zones; delete after cutover + regdhcp off
+0.0.10.in-addr.arpa	Primary	-	reverse LAN 10.0.0.0/24 (DDNS PTR target)
+1.10.in-addr.arpa	Primary	-	reverse WIRED 10.1.0.0/16 (DDNS PTR target)
+2.10.in-addr.arpa	Primary	-	reverse WIFI 10.2.0.0/16 (DDNS PTR target)
+111.10.in-addr.arpa	Primary	-	reverse MGMT 10.111.0.0/16 (DDNS PTR target)
+166.10.in-addr.arpa	Primary	-	reverse IOT 10.166.0.0/16 (DDNS PTR target)
+120.10.in-addr.arpa	Primary	-	reverse LAB 10.120.0.0/16 (DDNS PTR target)
 home.lan	Primary	-	wildcard redirect -> 10.120.10.55 (was Unbound local-zone redirect)
 hefner.lan	Primary	-	wildcard redirect -> 10.1.1.140 (was Unbound local-zone redirect)
 lab.gn.al	Forwarder	this-server	split-horizon: local records answer first, rest -> recursion (public NXDOMAIN)

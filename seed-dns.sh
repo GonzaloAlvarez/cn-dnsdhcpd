@@ -4,12 +4,16 @@
 # Reads knobs from .env and the inventory from dns/zones.tsv + dns/records.tsv
 # and applies them via the HTTP API. Safe to re-run any time:
 #   - settings are set to exactly what the knobs say (owned params only)
-#   - existing zones are skipped ("already exists")
+#   - existing zones are skipped ("already exists"); a TYPE mismatch between
+#     the TSV and the live zone warns — or converts in place when the run is
+#     invoked as DNS_ALLOW_ZONE_CONVERT=true ./seed-dns.sh (records survive)
 #   - records are applied with overwrite=true (the TSV replaces the RRset)
+#   - the pfSense DDNS TSIG key + per-zone RFC 2136 update policies are
+#     (re)applied when DDNS_TSIG_KEY_NAME/SECRET are set in .env
 #
 # Re-run after changing DNS_UPSTREAM_MODE / DNS_DNSSEC / DNS_BLOCKING or the
-# TSVs. Forwarder-target changes on an EXISTING zone are NOT automated:
-# delete the zone in the UI and re-run (see README).
+# TSVs. Forwarder-TARGET changes on an existing Forwarder zone are NOT
+# automated: delete the zone in the UI and re-run (see README).
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -78,7 +82,15 @@ else
   args+=( --data-urlencode "blockListUrls=false" )
 fi
 
-log "applying settings (mode=${MODE} dnssec=${DNSSEC} blocking=${BLOCKING})"
+# pfSense DDNS TSIG key (RFC 2136). tsigKeys is a full-list overwrite — this
+# repo owns the list.
+TSIG_NAME="$(env_get DDNS_TSIG_KEY_NAME)"
+TSIG_SECRET="$(env_get DDNS_TSIG_KEY_SECRET)"
+if [[ -n "$TSIG_NAME" && -n "$TSIG_SECRET" ]]; then
+  args+=( --data-urlencode "tsigKeys=${TSIG_NAME}|${TSIG_SECRET}|hmac-sha256" )
+fi
+
+log "applying settings (mode=${MODE} dnssec=${DNSSEC} blocking=${BLOCKING} tsig=${TSIG_NAME:-none})"
 api settings/set "${args[@]}" >/dev/null
 
 # ── 2. Query Logs (Sqlite) app ───────────────────────────────────────────────
@@ -140,11 +152,38 @@ else
   warn "k8s_gateway answered at neither 10.0.0.200 nor 10.0.0.210 — keeping the TSV value; k8s.lan will not resolve until this is fixed"
 fi
 
-# ── 4. zones ─────────────────────────────────────────────────────────────────
+# ── 4. zones (create; convert type mismatches when allowed) ─────────────────
 
-created=0 skipped=0
+LIVE_TYPES=$(api zones/list --data-urlencode "zonesPerPage=500" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+for z in d["response"].get("zones",[]):
+    print(f"{z[\"name\"]}\t{z[\"type\"]}")
+')
+
+live_type() { awk -F'\t' -v z="$1" '$1==z {print $2}' <<<"$LIVE_TYPES"; }
+
+ALLOW_CONVERT="${DNS_ALLOW_ZONE_CONVERT:-false}"
+created=0 skipped=0 converted=0
 while IFS=$'\t' read -r zone ztype fwd _comment; do
   [[ -z "$zone" || "$zone" == \#* ]] && continue
+  lt="$(live_type "$zone")"
+  if [[ -n "$lt" ]]; then
+    if [[ "$lt" != "$ztype" ]]; then
+      if [[ "$ALLOW_CONVERT" == "true" ]]; then
+        api zones/convert \
+          --data-urlencode "zone=${zone}" \
+          --data-urlencode "type=${ztype}" >/dev/null
+        log "zone CONVERTED: ${zone} (${lt} -> ${ztype}; records kept)"
+        converted=$((converted+1))
+      else
+        warn "zone TYPE MISMATCH: ${zone} is ${lt}, TSV says ${ztype} — re-run with DNS_ALLOW_ZONE_CONVERT=true to convert"
+      fi
+    else
+      skipped=$((skipped+1))
+    fi
+    continue
+  fi
   zargs=( --data-urlencode "zone=${zone}" --data-urlencode "type=${ztype}" )
   if [[ "$ztype" == "Forwarder" ]]; then
     [[ "$zone" == "k8s.lan" ]] && fwd="$K8S_GW"
@@ -155,31 +194,50 @@ while IFS=$'\t' read -r zone ztype fwd _comment; do
       --data-urlencode "proxyType=NoProxy"
     )
   fi
-  resp=$(api_raw zones/create "${zargs[@]}")
-  if grep -q '"status": *"ok"' <<<"$resp"; then
-    log "zone created: ${zone} (${ztype}${fwd:+ -> $fwd})"
-    created=$((created+1))
-  elif grep -qi 'already exists' <<<"$resp"; then
-    skipped=$((skipped+1))
-  else
-    die "zones/create failed for ${zone}: $resp"
-  fi
+  api zones/create "${zargs[@]}" >/dev/null
+  log "zone created: ${zone} (${ztype}${fwd:+ -> $fwd})"
+  created=$((created+1))
 done < dns/zones.tsv
 
-# ── 5. records ───────────────────────────────────────────────────────────────
+# ── 5. RFC 2136 update policies for the pfSense-DDNS zones ──────────────────
+# update ACL restricts sources to pfSense; the TSIG security policy restricts
+# what a signed update may touch. Both re-applied on every run.
+
+DDNS_ZONES=(lan 0.0.10.in-addr.arpa 1.10.in-addr.arpa 2.10.in-addr.arpa 111.10.in-addr.arpa 166.10.in-addr.arpa 120.10.in-addr.arpa)
+DDNS_TYPES="A,AAAA,PTR,TXT,DHCID"
+
+if [[ -n "$TSIG_NAME" && -n "$TSIG_SECRET" ]]; then
+  for z in "${DDNS_ZONES[@]}"; do
+    api zones/options/set \
+      --data-urlencode "zone=${z}" \
+      --data-urlencode "update=UseSpecifiedNetworkACL" \
+      --data-urlencode "updateNetworkACL=10.0.0.1,10.1.0.1,10.2.0.1,10.111.0.1,10.166.0.1,10.120.0.1" \
+      --data-urlencode "updateSecurityPolicies=${TSIG_NAME}|${z}|${DDNS_TYPES}|${TSIG_NAME}|*.${z}|${DDNS_TYPES}" >/dev/null
+  done
+  log "RFC 2136 update policies applied to ${#DDNS_ZONES[@]} zones (key=${TSIG_NAME})"
+else
+  warn "DDNS_TSIG_KEY_NAME/SECRET not set — skipping RFC 2136 update policies (pfSense DDNS will be rejected)"
+fi
+
+# ── 6. records ───────────────────────────────────────────────────────────────
 
 records=0
-while IFS=$'\t' read -r zone domain rtype value ttl; do
+while IFS=$'\t' read -r zone domain rtype value ttl ptr; do
   [[ -z "$zone" || "$zone" == \#* ]] && continue
   [[ "$rtype" == "A" ]] || die "records.tsv: unsupported type '${rtype}' for ${domain} (extend seed-dns.sh first)"
-  api zones/records/add \
-    --data-urlencode "domain=${domain}" \
-    --data-urlencode "zone=${zone}" \
-    --data-urlencode "type=A" \
-    --data-urlencode "ipAddress=${value}" \
-    --data-urlencode "ttl=${ttl}" \
-    --data-urlencode "overwrite=true" >/dev/null
+  rargs=(
+    --data-urlencode "domain=${domain}"
+    --data-urlencode "zone=${zone}"
+    --data-urlencode "type=A"
+    --data-urlencode "ipAddress=${value}"
+    --data-urlencode "ttl=${ttl}"
+    --data-urlencode "overwrite=true"
+  )
+  if [[ "${ptr:-false}" == "true" ]]; then
+    rargs+=( --data-urlencode "ptr=true" --data-urlencode "createPtrZone=false" )
+  fi
+  api zones/records/add "${rargs[@]}" >/dev/null
   records=$((records+1))
 done < dns/records.tsv
 
-log "done: ${created} zones created, ${skipped} zones already present, ${records} records applied"
+log "done: ${created} zones created, ${converted} converted, ${skipped} already present, ${records} records applied"
