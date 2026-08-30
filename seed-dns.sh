@@ -99,15 +99,19 @@ SSO_ID="$(env_get SSO_CLIENT_ID)"
 SSO_SECRET="$(env_get SSO_CLIENT_SECRET)"
 if [[ -n "$SSO_ID" && -n "$SSO_SECRET" ]]; then
   SSO_AUTH="$(env_get SSO_AUTHORITY)"
+  # Technitium serializes table params as flat pipe-separated data (row AND
+  # column separator '|'). SSO_GROUP_MAP in .env uses remote:local pairs,
+  # comma-separated — convert both separators to pipes here.
+  GMAP="$(env_get SSO_GROUP_MAP)"; GMAP="${GMAP//:/|}"; GMAP="${GMAP//,/|}"
   api admin/sso/set \
     --data-urlencode "ssoEnabled=true" \
     --data-urlencode "ssoAuthority=${SSO_AUTH}" \
     --data-urlencode "ssoClientId=${SSO_ID}" \
     --data-urlencode "ssoClientSecret=${SSO_SECRET}" \
-    --data-urlencode "ssoScopes=openid,profile,email,groups" \
+    --data-urlencode "ssoScopes=openid|profile|email|groups" \
     --data-urlencode "ssoAllowSignup=true" \
     --data-urlencode "ssoAllowSignupOnlyForMappedUsers=true" \
-    --data-urlencode "ssoGroupMap=$(env_get SSO_GROUP_MAP)" >/dev/null
+    --data-urlencode "ssoGroupMap=${GMAP}" >/dev/null
   log "SSO enabled (authority=${SSO_AUTH})"
 else
   log "SSO_CLIENT_ID/SECRET not set — SSO left untouched"
