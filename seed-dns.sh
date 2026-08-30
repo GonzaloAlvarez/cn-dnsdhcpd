@@ -158,7 +158,7 @@ LIVE_TYPES=$(api zones/list --data-urlencode "zonesPerPage=500" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
 for z in d["response"].get("zones",[]):
-    print(f"{z[\"name\"]}\t{z[\"type\"]}")
+    print(z["name"] + "\t" + z["type"])
 ')
 
 live_type() { awk -F'\t' -v z="$1" '$1==z {print $2}' <<<"$LIVE_TYPES"; }
