@@ -1,11 +1,11 @@
 # cn-dnsdhcpd
 
 [Technitium DNS Server](https://technitium.com/dns/) 15.4 on **pki.lan**
-(10.0.0.192) — the client-facing LAN resolver, replacing pfSense Unbound.
+(10.0.0.250) — the client-facing LAN resolver, replacing pfSense Unbound.
 
 **Division of labor**: pfSense keeps DHCP; every lease event pushes the
 hostname's A + PTR records straight into Technitium via **RFC 2136 dynamic
-updates (TSIG-signed)**, and DHCP hands clients `10.0.0.192` as their DNS
+updates (TSIG-signed)**, and DHCP hands clients `10.0.0.250` as their DNS
 server. The `lan` zone and six per-VLAN reverse zones are Primary zones here;
 all pfSense static mappings and the load-bearing infrastructure hosts are
 additionally pinned as static records (`dns/records.tsv`), so nothing depends
@@ -15,15 +15,18 @@ Phase 2 (optional, runbook b) would move DHCP itself here via pfSense DHCP
 Relay.
 
 Tailnet DNS (VPS CoreDNS for `*.lab.gn.al`, MagicDNS for `*.ts.gn.al`) is
-**not** touched by this stack. pki is unreachable from pure-tailnet clients
-(10.0.0.192 is shadowed by the k8s MetalLB /27 advert) — this is a LAN-only
-service by design.
+**not** touched by this stack. This is a LAN-only service by design: no
+headscale ACL permits tailnet clients to reach 10.0.0.250:53. (Moving off
+10.0.0.192 in 2026-08 took pki out of the k8s MetalLB /27 shadow, so the
+host itself is now tailnet-routable again via infra-exit — the old
+`tag:devbox → 10.0.0.192:80,443` ACL rule needs updating to .250 before
+devboxes can use step-ca.)
 
 ## Services
 
 | Service | Purpose |
 |---|---|
-| `technitium` | `technitium/dns-server:15.4.0` (pinned), `network_mode: host`. DNS on 53/udp+tcp, web console/API on 5380 (bound to 10.0.0.192 + 127.0.0.1). Excluded from cn-pki's host-wide watchtower (deliberate upgrades only). |
+| `technitium` | `technitium/dns-server:15.4.0` (pinned), `network_mode: host`. DNS on 53/udp+tcp, web console/API on 5380 (bound to 10.0.0.250 + 127.0.0.1). Excluded from cn-pki's host-wide watchtower (deliberate upgrades only). |
 | `backup-dump` | Long-running loop fetching a daily `settings/backup` API zip (settings, zones, apps, auth, DHCP scopes) into `./backups/`, pruned at 14 days. Long-running on purpose — a one-shot would be restart-looped by the amun-docker reconcile cron. |
 | `backup` | offen → S3 `cloudnet-lab-storage/dnsdhcpd/` + raidnas WebDAV `/dnsdhcpd/`, Sundays 02:00, 56-day retention, SMTP notify. Tars `./config` (live state) + `./backups` (the authoritative restore artifacts). |
 
@@ -36,7 +39,7 @@ known cosmetic wart).
 ## Web UI
 
 - **`https://dns.pki.lan`** — routed by cn-pki's traefik (file provider →
-  `http://10.0.0.192:5380`), step-ca leaf, auto-renewed.
+  `http://10.0.0.250:5380`), step-ca leaf, auto-renewed.
 - **`http://pki.lan:5380`** — break-glass direct access (plain HTTP).
 
 ## Bring-up
@@ -118,7 +121,7 @@ are left alone.
 Side-by-side diff against pfSense (run from any LAN host with `dig`):
 
 ```sh
-PF=10.0.0.1 TD=10.0.0.192
+PF=10.0.0.1 TD=10.0.0.250
 for q in rpid11.lan neptune.lan router.lan \
          auth.neptune.lan outline.neptune.lan photos.neptune.lan sync.neptune.lan \
          accounts.fxa.neptune.lan api.fxa.neptune.lan oauth.fxa.neptune.lan profile.fxa.neptune.lan \
@@ -139,8 +142,8 @@ Explicit expectations:
 
 | Probe | Expect |
 |---|---|
-| `dig @10.0.0.192 rpid11.lan` | 10.0.0.188 (pinned; dynamic clients appear via DDNS after a renewal) |
-| `dig @10.0.0.192 -x 10.0.0.1` | `router.lan.` (PTR via `10.in-addr.arpa` forward) |
+| `dig @10.0.0.250 rpid11.lan` | 10.0.0.188 (pinned; dynamic clients appear via DDNS after a renewal) |
+| `dig @10.0.0.250 -x 10.0.0.1` | `router.lan.` (PTR via `10.in-addr.arpa` forward) |
 | `anything.kaiser.lan` | `10.1.1.140` (CoreDNS wildcard) |
 | `hello.k8s.lan` | matches pfSense (k8s_gateway) |
 | 10× `*.lab.gn.al` overrides | `10.1.1.92` (`chat`/`exercises` → `10.1.1.140`) |
@@ -172,7 +175,7 @@ Mappings → Add (grab MACs from Status → DHCP Leases; pki's is
 
 | Host | Interface | IP |
 |---|---|---|
-| pki | LAN | 10.0.0.192 |
+| pki | LAN | 10.0.0.250 |
 | kaiser | WIRED | 10.1.1.140 |
 | infra | WIRED | 10.1.1.158 |
 
@@ -182,14 +185,14 @@ Also note: the MetalLB VIP 10.0.0.200 (k8s_gateway) sits inside the LAN pool
 **Step 1 — per scope (×6: LAN, WIRED, WIFI, MGMT, IOT, LAB).**
 Services → DHCP Server → *(interface)*:
 
-- **Servers → DNS Servers**: `10.0.0.192`
+- **Servers → DNS Servers**: `10.0.0.250`
   (this is what points clients at Technitium — they pick it up on lease
   renewal, ≤1 h with the default 2 h lease; force one with
   `dhclient -r && dhclient` or a Wi-Fi toggle to verify)
 - **Dynamic DNS** (click *Display Advanced*):
   - ☑ Enable registration of DHCP client names in DNS
   - DDNS Domain: `lan`
-  - Primary DDNS address: `10.0.0.192`
+  - Primary DDNS address: `10.0.0.250`
   - DNS Domain key: `pfsense-ddns`
   - Key algorithm: `hmac-sha256`
   - DNS Domain key secret: from kauket —
@@ -203,8 +206,8 @@ LAN. Doing all six in one sitting is also fine — rollback is trivial.
 **Step 2 — verify.** Renew a client on the flipped scope, then:
 
 ```sh
-dig @10.0.0.192 <that-client-hostname>.lan +short     # DDNS-registered A
-dig @10.0.0.192 -x <that-client-ip> +short            # DDNS-registered PTR
+dig @10.0.0.250 <that-client-hostname>.lan +short     # DDNS-registered A
+dig @10.0.0.250 -x <that-client-ip> +short            # DDNS-registered PTR
 ```
 
 Also check pfSense's DHCP log (Status → System Logs → DHCP) for
@@ -255,17 +258,17 @@ all-or-nothing across all 6 VLANs. Plan a maintenance window.
    | LAB | 10.120.10.10–10.120.10.220 | 255.255.0.0 | 10.120.0.1 | 10.120.0.1 |
 
    Each scope: `domainName=lan` (triggers automatic A/PTR registration —
-   this replaces regdhcp), `dnsServers=10.0.0.192`, lease time 2h to match
+   this replaces regdhcp), `dnsServers=10.0.0.250`, lease time 2h to match
    pfSense defaults. Migrate all 44 static mappings with
    `dhcp/scopes/addReservedLease` (script them from a pfSense config.xml
    export; reserved leases with a hostname get persistent DNS records even
    before first allocation).
 2. **Flip**: enable all 6 scopes → pfSense: Services → DHCP Server → disable
    on every interface → Services → DHCP Relay → enable, Downstream
-   Interfaces = all 6 internal, Upstream Server = `10.0.0.192`. Leave
+   Interfaces = all 6 internal, Upstream Server = `10.0.0.250`. Leave
    **"Append circuit ID and agent ID" OFF** — Technitium ignores Option 82.
 3. **Verify** one renewing client per VLAN (address in range, gateway =
-   interface IP, DNS = 10.0.0.192, hostname registered in the `lan` zone).
+   interface IP, DNS = 10.0.0.250, hostname registered in the `lan` zone).
 4. **After the flip**: convert the `lan` zone from Forwarder to Primary
    (Technitium's own scope registration becomes authoritative) and delete
    the `10.in-addr.arpa` forwarder (Technitium auto-creates reverse zones).

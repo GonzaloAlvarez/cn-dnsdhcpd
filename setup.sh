@@ -125,11 +125,11 @@ cn-dnsdhcpd stack is up.
 
   Web UI  :  https://dns.pki.lan          (cn-pki traefik, step-ca cert)
   Break-glass:  http://pki.lan:5380       (direct, plain HTTP)
-  Resolver:  10.0.0.192:53 (udp+tcp)
+  Resolver:  10.0.0.250:53 (udp+tcp)
 
   Smoke test:
-    dig @10.0.0.192 google.com +short
-    dig @10.0.0.192 auth.lab.gn.al +short   # expect 10.1.1.92
+    dig @10.0.0.250 google.com +short
+    dig @10.0.0.250 auth.lab.gn.al +short   # expect 10.1.1.92
 
   Full verification battery: see README.md.
 EOF

@@ -13,7 +13,7 @@ services:
       # Steady-state config is applied by seed-dns.sh through the HTTP API.
       - DNS_SERVER_DOMAIN=pki.lan
       - DNS_SERVER_ADMIN_PASSWORD_FILE=/run/secrets/admin_password
-      - DNS_SERVER_WEB_SERVICE_LOCAL_ADDRESSES=10.0.0.192,127.0.0.1
+      - DNS_SERVER_WEB_SERVICE_LOCAL_ADDRESSES=10.0.0.250,127.0.0.1
       - DNS_SERVER_LOG_USING_LOCAL_TIME=true
       - TZ=${TIMEZONE}
     secrets:
