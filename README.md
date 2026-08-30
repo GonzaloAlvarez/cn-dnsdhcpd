@@ -52,10 +52,14 @@ chain, but host-networked services do NOT — Technitium needs:
 sudo ufw allow proto udp from any to any port 53 comment 'cn-dnsdhcpd Technitium DNS'
 sudo ufw allow proto tcp from any to any port 53 comment 'cn-dnsdhcpd Technitium DNS'
 sudo ufw allow proto tcp from 10.0.0.0/8 to any port 5380 comment 'cn-dnsdhcpd console break-glass (LAN)'
-sudo ufw allow proto tcp from 172.18.0.0/16 to any port 5380 comment 'cn-dnsdhcpd console via cn-pki traefik'
+sudo ufw allow proto tcp from 172.16.0.0/12 to any port 5380 comment 'cn-dnsdhcpd console via docker bridges (subnet shifts on reboot)'
+sudo ufw allow proto tcp from 10.1.1.140 to any port 7979 comment 'cn-dnsdhcpd json_exporter scraped by kaiser prometheus'
 ```
 
-(Phase 2 DHCP needs 67/udp opened too — see runbook b.)
+(The docker-bridge rule is deliberately the whole 172.16.0.0/12: bridge
+subnets are assigned by network-creation order and CHANGE across reboots —
+a /16-scoped rule broke the dns.pki.lan route after the first reboot.
+Phase 2 DHCP needs 67/udp opened too — see runbook b.)
 
 ```sh
 git clone git@github.com:GonzaloAlvarez/cn-dnsdhcpd.git ~/cn-dnsdhcpd

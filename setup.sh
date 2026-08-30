@@ -48,6 +48,8 @@ BASE="http://127.0.0.1:5380"
 # ── dirs + admin password secret file ───────────────────────────────────────
 
 mkdir -p config backups secrets
+# placeholder so the metrics-exporter bind mount never materializes as a dir
+[[ -f secrets/api_token.txt ]] || ( umask 077; printf '' > secrets/api_token.txt )
 
 ADMIN_PW="$(env_get DNS_ADMIN_PASSWORD)"
 [[ -n "$ADMIN_PW" ]] || die "DNS_ADMIN_PASSWORD is empty in the Kauket-managed .env"
@@ -109,6 +111,14 @@ else
   log "token minted and written to .env"
   log "recreating backup-dump so it picks up the token"
   docker compose up -d backup-dump
+fi
+
+# ── API token file for metrics-exporter (json_exporter Bearer creds) ────────
+
+if [[ "$(cat secrets/api_token.txt 2>/dev/null)" != "$TOKEN" ]]; then
+  ( umask 077; printf '%s' "$TOKEN" > secrets/api_token.txt )
+  log "rendered secrets/api_token.txt; recreating metrics-exporter"
+  docker compose up -d --force-recreate metrics-exporter
 fi
 
 # ── seed the DNS configuration ───────────────────────────────────────────────

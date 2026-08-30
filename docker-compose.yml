@@ -73,6 +73,21 @@ services:
         done
     restart: unless-stopped
 
+  # Prometheus adapter: Technitium has no native Prometheus endpoint, only
+  # /api/dashboard/metrics/json — json_exporter maps it onto :7979. Host net
+  # so it reaches the console on 127.0.0.1 and kaiser can scrape
+  # 10.0.0.250:7979 (ufw-allowed from kaiser only). Token via file, never in
+  # the (public) cn-observability scrape config.
+  metrics-exporter:
+    image: quay.io/prometheuscommunity/json-exporter:v0.7.0
+    network_mode: host
+    user: "1000:1000"
+    command: ["--config.file=/config/json-exporter.yml"]
+    volumes:
+      - ./metrics/json-exporter.yml:/config/json-exporter.yml:ro
+      - ./secrets/api_token.txt:/secrets/api_token.txt:ro
+    restart: unless-stopped
+
   # offen — weekly tar of ./config (live state, best-effort) + ./backups
   # (the authoritative settings/backup zips) to shared S3 + raidnas WebDAV.
   # Backup window: Sun 02:00 (vaultwarden/fitness 03:00, authentik 03:30,

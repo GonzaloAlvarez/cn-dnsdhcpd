@@ -1,0 +1,32 @@
+# json_exporter config — Technitium 15.x has no native Prometheus endpoint,
+# only /api/dashboard/metrics/json. This maps its lifetime counters into
+# scrapeable metrics. Kaiser Prometheus scrapes :7979/probe with
+# module=technitium and the JSON URL as target (see cn-observability
+# prometheus.yml job dnsdhcpd-technitium). The API token stays on this host
+# (secrets/api_token.txt, rendered by setup.sh) — never in the scrape config.
+modules:
+  technitium:
+    http_client_config:
+      authorization:
+        type: Bearer
+        credentials_file: /secrets/api_token.txt
+    metrics:
+      - name: technitium_uptime_seconds
+        path: '{.response.uptimeSeconds}'
+        help: Technitium DNS server uptime in seconds
+      - name: technitium
+        type: object
+        path: '{.response.lifetimeCounters}'
+        help: Technitium lifetime query counters
+        values:
+          queries_total: '{.totalQueries}'
+          noerror_total: '{.totalNoError}'
+          servfail_total: '{.totalServerFailure}'
+          nxdomain_total: '{.totalNxDomain}'
+          refused_total: '{.totalRefused}'
+          authoritative_total: '{.totalAuthoritative}'
+          recursive_total: '{.totalRecursive}'
+          cached_total: '{.totalCached}'
+          blocked_total: '{.totalBlocked}'
+          dropped_total: '{.totalDropped}'
+          clients: '{.totalClients}'
