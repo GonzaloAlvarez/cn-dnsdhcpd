@@ -34,6 +34,7 @@ lab.gn.al	oauth.fxa.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	profile.fxa.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	chat.lab.gn.al	A	10.1.1.140	300	false
 lab.gn.al	exercises.lab.gn.al	A	10.1.1.140	300	false
+lab.gn.al	roms.lab.gn.al	A	10.1.1.140	300	false
 home.lan	home.lan	A	10.120.10.55	300	false
 home.lan	*.home.lan	A	10.120.10.55	300	false
 hefner.lan	hefner.lan	A	10.1.1.140	300	false
