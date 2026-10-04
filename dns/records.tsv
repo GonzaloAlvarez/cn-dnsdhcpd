@@ -24,6 +24,8 @@ lan	oauth.fxa.neptune.lan	A	10.1.1.92	300	false
 lan	profile.fxa.neptune.lan	A	10.1.1.92	300	false
 lan	auth.infra.lan	A	10.1.1.158	300	false
 lan	dns.pki.lan	A	10.0.0.250	300	false
+lan	nvr.cerberus.lan	A	10.0.0.230	300	false
+lan	grafana.cerberus.lan	A	10.0.0.230	300	false
 lab.gn.al	auth.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	outline.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	photos.lab.gn.al	A	10.1.1.92	300	false
@@ -90,6 +92,7 @@ lan	macminione.lan	A	10.120.33.21	300	true
 lan	baltic.lan	A	10.120.33.111	300	true
 lan	router.lan	A	10.0.0.1	300	true
 lan	pki.lan	A	10.0.0.250	300	true
+lan	cerberus.lan	A	10.0.0.230	300	true
 lan	kaiser.lan	A	10.1.1.140	300	true
 lan	infra.lan	A	10.1.1.158	300	true
 lan	homeiot.lan	A	10.1.1.134	300	true
