@@ -59,6 +59,7 @@ lan	cam-victor.lan	A	10.2.0.22	300	true
 lan	cam-back.lan	A	10.2.0.24	300	true
 lan	omega.lan	A	10.2.0.28	300	true
 lan	omegados.lan	A	10.2.0.29	300	true
+lan	printer.lan	A	10.2.0.30	300	true
 lan	cam-silvia.lan	A	10.2.0.35	300	true
 lan	cam-front.lan	A	10.2.0.37	300	true
 lan	c4b301d43661.lan	A	10.2.0.120	300	true
