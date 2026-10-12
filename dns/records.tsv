@@ -26,6 +26,7 @@ lan	auth.infra.lan	A	10.1.1.158	300	false
 lan	dns.pki.lan	A	10.0.0.250	300	false
 lan	nvr.cerberus.lan	A	10.0.0.230	300	false
 lan	grafana.cerberus.lan	A	10.0.0.230	300	false
+lan	scan.print.lan	A	10.2.0.30	300	false
 lab.gn.al	auth.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	outline.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	photos.lab.gn.al	A	10.1.1.92	300	false
