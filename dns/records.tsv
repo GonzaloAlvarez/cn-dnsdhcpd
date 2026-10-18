@@ -14,6 +14,9 @@
 #     them (no DHCID prerequisite match) — that's intended. kaiser.lan's A is
 #     occluded by the kaiser.lan Forwarder zone (CoreDNS answers) — the row
 #     exists for its PTR.
+lan	klaus.lan	A	10.2.0.31	300	false
+lan	minerva.lan	A	10.2.0.32	300	false
+lan	travelblock.lan	A	10.2.0.33	300	false
 lan	auth.neptune.lan	A	10.1.1.92	300	false
 lan	outline.neptune.lan	A	10.1.1.92	300	false
 lan	photos.neptune.lan	A	10.1.1.92	300	false
@@ -37,6 +40,7 @@ lab.gn.al	oauth.fxa.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	profile.fxa.lab.gn.al	A	10.1.1.92	300	false
 lab.gn.al	chat.lab.gn.al	A	10.1.1.140	300	false
 lab.gn.al	exercises.lab.gn.al	A	10.1.1.140	300	false
+lab.gn.al	llmrouter.lab.gn.al	A	10.1.1.140	300	false
 lab.gn.al	roms.lab.gn.al	A	10.1.1.140	300	false
 home.lan	home.lan	A	10.120.10.55	300	false
 home.lan	*.home.lan	A	10.120.10.55	300	false
