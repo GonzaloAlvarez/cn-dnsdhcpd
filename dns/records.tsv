@@ -54,7 +54,6 @@ mdmenrollment.apple.com	mdmenrollment.apple.com	A	0.0.0.0	300	false
 lan	sg300.lan	A	10.0.0.40	300	true
 lan	usg24.lan	A	10.0.0.106	300	true
 lan	DESKTOP-B084HF4.lan	A	10.0.0.245	300	true
-lan	fermat.lan	A	10.1.1.11	300	true
 lan	calendula.lan	A	10.1.1.50	300	true
 lan	unifi.lan	A	10.1.1.90	300	true
 lan	neptune.lan	A	10.1.1.92	300	true
