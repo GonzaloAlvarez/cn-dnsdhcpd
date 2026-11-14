@@ -43,6 +43,7 @@ lab.gn.al	llmrouter.lab.gn.al	A	10.1.1.140	300	false
 lab.gn.al	roms.lab.gn.al	A	10.1.1.140	300	false
 lab.gn.al	docs.lab.gn.al	A	10.1.1.140	300	false
 lab.gn.al	drive.lab.gn.al	A	10.1.1.140	300	false
+lab.gn.al	devices.lab.gn.al	A	10.1.1.140	300	false
 home.lan	home.lan	A	10.120.10.55	300	false
 home.lan	*.home.lan	A	10.120.10.55	300	false
 hefner.lan	hefner.lan	A	10.1.1.140	300	false
